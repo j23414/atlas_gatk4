@@ -100,7 +100,9 @@ gatk2 FastqToSam \
 
 ```
 gatk2 MarkIlluminaAdapters \
-  ...
+  --INPUT ${READNAME}.bam \
+  --OUTPUT ${READNAME}_marked.bam \
+  --METRICS ${READNAME}_marked_metrics.txt
 ```
 
 **(2b) bwa index**
@@ -115,7 +117,12 @@ bwa-mem2 index $REF
 
 ```
 gatk2 SamToFastq \
- ...
+  --INPUT ${READNAME}_marked.bam \
+  --FASTQ ${READNAME}_interleaved.fq \
+  --CLIPPING_ATTRIBUTE XT \
+  --CLIPPING_ACTION 2 \
+  --INTERLEAVE true \
+  --INCLUDE_NON_PF_READS true
 ```
 
 **(3b) CreateSequenceDictionary**
@@ -123,33 +130,58 @@ gatk2 SamToFastq \
 ```
 gatk2 CreateSequenceDictionary \
   -R $REF \
-  -O ${REF}.dict
+  -O ${REF}.dict   # Actually will need to drop off fasta extension
 ```
 
 **(4) bwa mem**
 
 ```
-bwa-mem2 mem -t 16 $REF $R1 $R2 |\
-  samtools view --threads 16 -bS - > ${READNAME}_aln.bam
+PROC=2
+bwa-mem2 mem -t $PROC $REF $R1 $R2 |\
+  samtools view --threads $PROC -bS - > ${READNAME}_aln.bam
 ```
 
 **(5) MergeBamAlignment**
 
 ```
 gatk2 MergeBamAlignment \
-  ...
+  --REFERENCE_SEQUENCE $REF \
+  --UNMAPPED_BAM ${READNAME}.bam \
+  --ALIGNED_BAM ${READNAME}_aln.bam \
+  --OUTPUT ${READNAME}_merged.bam \
+  --CREATE_INDEX true \
+  --ADD_MATE_CIGAR true \
+  --CLIP_ADAPTERS false \
+  --CLIP_OVERLAPPING_READS true \
+  --INCLUDE_SECONDARY_ALIGNMENTS true \
+  --MAX_INSERTIONS_OR_DELETIONS -1 \
+  --PRIMARY_ALIGNMENT_STRATEGY MostDistant \
+  --ATTRIBUTES_TO_RETAIN XS
 ```
 
 **(6) MarkDuplicates**
 
 ```
-gatk2 MarkDuplicates \
+gatk2 MarkDuplicates \  #<=hmm we seemed to skip this step in our nextflow pipeline
  ...
 ```
 
 **(7) AddOr-ReplaceReadGroups**
 
 ...
+
+**(10?) Make Windows**
+
+```
+samtools faidx $REF
+awk -F'\t' '{print $1"\t"$2}' ${REF}.fai > genome_length.txt
+bedtools makewindows -w 100000 -g genome_length.txt |\
+  awk '{print $1"\t"$2+1"\t"$3}' |\
+  sed 's/\t/:/1' |\
+  sed 's/\t/-/g' > ${REF}_coords.bed
+```
+
+
 
 
 
