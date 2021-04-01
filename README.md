@@ -120,6 +120,12 @@ gatk2 SamToFastq \
 
 **(3b) CreateSequenceDictionary**
 
+```
+gatk2 CreateSequenceDictionary \
+  -R $REF \
+  -O ${REF}.dict
+```
+
 **(4) bwa mem**
 
 ```
