@@ -212,9 +212,30 @@ gatk2 SortVcf \
 
 grep -v "^#" chr1_1-100000_sorted.vcf | cut -f 8 | grep -oe ";DP=.*" | cut -f 2 -d ';' | cut -f 2 -d "=" > dp.txt
 
-module load datamash # Geh, why doesn't this work? Hmm, this might not be an Atlas module...
-#> cat dp.txt | $datamash_app mean 1 sstdev 1 > dp.stats
-#> cat dp.stats | awk '{print \$1+5*\$2}'
+# module load datamash # Geh, why doesn't this work? Hmm, this might not be an Atlas module...
+# Okay for now installed in a conda env: "conda install -c bioconda datamash"
+cat dp.txt | datamash mean 1 sstdev 1 > dp.stats
+cat dp.stats | awk '{print $1+5*$2}'
+#> 187.433
+```
+
+**(13) gatk VariantFiltration**
+
+```
+gatk2 VariantFiltration \
+  --reference ${REF} \
+  --sequence-dictionary ${REF}.dict \
+  --variant chr1_1-100000_sorted.vcf \
+  --filter-expression "QD < 2.0 || FS > 60.0 || MQ < 40.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0 || DP > 187.433" \
+  --filter-name FAIL \
+  --output chr1_1-100000_sorted_marked.vcf
+```
+
+**(14) Keep only passing**
+
+```
+cat chr1_1-100000_sorted_marked.vcf | grep "^#" > chr1_1-100000_sorted_marked_snp-only.pass-only.vcf
+cat chr1_1-100000_sorted_marked.vcf | grep -v "^#" | awk '$7=="PASS"' >> chr1_1-100000_sorted_marked_snp-only.pass-only.vcf
 ```
 
 
