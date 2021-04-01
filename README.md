@@ -179,8 +179,43 @@ bedtools makewindows -w 100000 -g genome_length.txt |\
   awk '{print $1"\t"$2+1"\t"$3}' |\
   sed 's/\t/:/1' |\
   sed 's/\t/-/g' > ${REF}_coords.bed
+  
+head ${REF}_coords.bed
+#> chr1:1-100000
+#> chr1:100001-200000
+#> chr1:200001-300000
 ```
 
+**(11) GATK HaplotypeCaller (finally!)**
+
+```
+gatk2 HaplotypeCaller \
+  -R $REF \
+  -I ${READNAME}_merged.bam \
+  -L chr1:1-100000 \
+  -O chr1_1-100000.vcf
+
+# === gatk reference command below, might still need --java-options
+# gatk_app --java-options \"-Xmx80g -XX:+UseParallelGC\" HaplotypeCaller -R $genome_fasta -I \$BAMFILES -L $window --output ${window.replace(':','_')}.vcf
+```
+
+Usually running for several windows (in parallel), so would need to merge results... skipping for now.
+
+**(12) Sort and calc DP value**
+
+```
+gatk2 SortVcf \
+  --INPUT chr1_1-100000.vcf \
+  --SEQUENCE_DICTIONARY ${REF}.dict \
+  --CREATE_INDEX true \
+  --OUTPUT chr1_1-100000_sorted.vcf
+
+grep -v "^#" chr1_1-100000_sorted.vcf | cut -f 8 | grep -oe ";DP=.*" | cut -f 2 -d ';' | cut -f 2 -d "=" > dp.txt
+
+module load datamash # Geh, why doesn't this work? Hmm, this might not be an Atlas module...
+#> cat dp.txt | $datamash_app mean 1 sstdev 1 > dp.stats
+#> cat dp.stats | awk '{print \$1+5*\$2}'
+```
 
 
 
