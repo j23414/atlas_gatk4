@@ -238,8 +238,40 @@ cat chr1_1-100000_sorted_marked.vcf | grep "^#" > chr1_1-100000_sorted_marked_sn
 cat chr1_1-100000_sorted_marked.vcf | grep -v "^#" | awk '$7=="PASS"' >> chr1_1-100000_sorted_marked_snp-only.pass-only.vcf
 ```
 
+## Nextflow Run 
 
+```
+nextflow run 04_GATK.nf \
+  --genome "00_Raw-Data/test-data/ref/*.fasta" \
+  --reads "00_Raw-Data/test-data/fastq/*_{R1,R2}.fastq.gz" \
+  -resume \
+  -with-singularity gatk.sif \
+  -with-timeline "timeline_report.html"
+```
 
+```
+N E X T F L O W  ~  version 20.10.0
+Launching `04_GATK.nf` [voluminous_hodgkin] - revision: 89ee103d4e
+executor >  slurm (149)
+[a8/0b122d] process > bwamem2_index (b73_chr1_150... [100%] 1 of 1 ✔
+[57/54f597] process > bwamem2_mem (BioSample19)      [100%] 27 of 27 ✔
+[3b/ca5153] process > FastqToSam (BioSample02)       [100%] 27 of 27 ✔
+[86/8fdb7c] process > MarkIlluminaAdapters (19_Bi... [100%] 27 of 27 ✔
+[78/b84e2a] process > SamToFastq (19_BioSample02_... [100%] 27 of 27 ✔
+[5a/7467d4] process > CreateSequenceDictionary (b... [100%] 1 of 1 ✔
+[35/fd20b7] process > samtools_faidx (b73_chr1_15... [100%] 1 of 1 ✔
+[af/8e262d] process > MergeBamAlignment (19_BioSa... [100%] 27 of 27 ✔
+[96/6dffa1] process > makewindows (b73_chr1_15000... [100%] 1 of 1 ✔
+[6c/6fba65] process > gatk_HaplotypeCaller (chr1:... [ 50%] 5 of 10
+[-        ] process > merge_vcf                      -
+[-        ] process > vcftools_snp_only              -
+[-        ] process > SortVcf                        -
+[-        ] process > calc_DPvalue                   -
+[-        ] process > VariantFiltration              -
+[-        ] process > keep_only_pass                 -
+```
+
+* [ ] Compare Nextflow processes with WDL processes, notice similarity in naming - [gatk4-rna-best-practices.wdl](https://github.com/gatk-workflows/gatk4-rnaseq-germline-snps-indels/blob/master/gatk4-rna-best-practices.wdl)
 
 
 
