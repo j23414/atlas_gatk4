@@ -229,6 +229,34 @@ process makewindows {
   """
 }
 
+process gatk_HaplotypeCaller {
+  tag "$window"
+  label 'gatk'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+
+  publishDir "${params.outdir}"
+
+  input:  // [window, reads files ..., genome files ...]
+  tuple val(window), path(bam), path(bai), path(genome_fasta), path(genome_dict), path(genome_fai)
+
+  output: // identified SNPs as a vcf file
+  path("*.vcf")
+//  path "*.vcf.idx", emit: 'idx'
+
+  script:
+  """
+  #! /usr/bin/env bash
+  BAMFILES=`echo $bam | sed 's/ / -I /g' | tr '[' ' ' | tr ']' ' '`
+  gatk HaplotypeCaller \
+  -R $genome_fasta \
+  -I \$BAMFILES \
+  -L $window \
+  --output ${window.replace(':','_')}.vcf
+  """
+}
+//  --java-options \"-Xmx80g -XX:+UseParallelGC\"
+
 // === Main Workflow
 workflow {
   genome_ch = channel.fromPath(params.genome, checkIfExists:true)
@@ -258,15 +286,15 @@ workflow {
   genome_ch | ( CreateSequenceDictionary & samtools_faidx & makewindows )
   both_ch = unmapped_ch | join(mapped_ch) | combine(genome_ch) | combine(CreateSequenceDictionary.out) | MergeBamAlignment
 
-  allbam_ch = MergeBamAlignment.out | map { n -> n.get(0)} | collect
-  allbai_ch = MergeBamAlignment.out | map { n -> n.get(1)} | collect
-  allbam_ch | combine(allbai_ch) | view
+  allbai_ch = MergeBamAlignment.out | map { n -> n.get(1)} | collect | map { n -> [n]}
+  allbambai_ch = MergeBamAlignment.out | map { n -> n.get(0)} | collect | map { n -> [n]} | combine(allbai_ch)
 
-/*
   makewindows.out | splitText( by:1) |
-      map { n -> n.replaceFirst("\n","") } |
-      combine(MergeBamAlignment.out) | view
-*/
-
+    map { n -> n.replaceFirst("\n","") } |
+    combine(allbambai_ch) | 
+    combine(genome_ch) |
+    combine(CreateSequenceDictionary.out) |
+    combine(samtools_faidx.out) |
+    gatk_HaplotypeCaller
   
 }
