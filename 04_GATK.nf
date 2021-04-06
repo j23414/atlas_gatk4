@@ -15,49 +15,6 @@ params.reads_file=false
 params.window=100000
 
 // === Define Processes
-process bwamem2_index {
-    tag "${genome_fasta.simpleName}"
-    label 'bwamem'
-    executor 'slurm'
-    clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
-
-    publishDir "${params.outdir}", mode: 'copy'
-
-    input:
-    path(genome_fasta)
-
-    output: // [ genome.fasta, [genome index files] ]
-    tuple path("$genome_fasta"), path("${genome_fasta}*")
-
-    script:
-    """
-    #! /usr/bin/env bash
-    bwa-mem2 index ${genome_fasta}
-    """
-}
-
-process bwamem2_mem {
-    tag "${readname}"
-    label 'bwamem'
-    executor 'slurm'
-    clusterOptions '-N 1 -n 16 -t 04:00:00 --account=isu_gif_vrsc'
-
-    publishDir "${params.outdir}", mode: 'copy'
-
-    input:
-    tuple path(genome_fasta), path(genome_index_files), \
-      val(readname), path(readpairs), val(i_readname)
-
-    output:
-    path("${i_readname}_mapped.bam")
-
-    script:
-    """
-    #! /usr/bin/env bash
-    bwa-mem2 mem -t 16 ${genome_fasta} ${readpairs} |\
-     samtools view --threads 16 -bS - > ${i_readname}_mapped.bam
-    """
-}
 
 process FastqToSam {
   tag "$readname"
@@ -137,6 +94,50 @@ process SamToFastq {
   --INTERLEAVE true \
   --INCLUDE_NON_PF_READS true
   """
+}
+
+process bwamem2_index {
+    tag "${genome_fasta.simpleName}"
+    label 'bwamem'
+    executor 'slurm'
+    clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+
+    publishDir "${params.outdir}", mode: 'copy'
+
+    input:
+    path(genome_fasta)
+
+    output: // [ genome.fasta, [genome index files] ]
+    tuple path("$genome_fasta"), path("${genome_fasta}*")
+
+    script:
+    """
+    #! /usr/bin/env bash
+    bwa-mem2 index ${genome_fasta}
+    """
+}
+
+process bwamem2_mem {
+    tag "${readname}"
+    label 'bwamem'
+    executor 'slurm'
+    clusterOptions '-N 1 -n 16 -t 04:00:00 --account=isu_gif_vrsc'
+
+    publishDir "${params.outdir}", mode: 'copy'
+
+    input:
+    tuple path(genome_fasta), path(genome_index_files), \
+      val(readname), path(readpairs), val(i_readname)
+
+    output:
+    path("${i_readname}_mapped.bam")
+
+    script:
+    """
+    #! /usr/bin/env bash
+    bwa-mem2 mem -t 16 ${genome_fasta} ${readpairs} |\
+     samtools view --threads 16 -bS - > ${i_readname}_mapped.bam
+    """
 }
 
 process CreateSequenceDictionary {
@@ -255,14 +256,13 @@ process gatk_HaplotypeCaller {
   """
   #! /usr/bin/env bash
   BAMFILES=`echo $bam | sed 's/ / -I /g' | tr '[' ' ' | tr ']' ' '`
-  gatk HaplotypeCaller \
+  gatk --java-options \"-Xmx80g -XX:+UseParallelGC\" HaplotypeCaller \
   -R $genome_fasta \
   -I \$BAMFILES \
   -L $window \
   --output ${window.replace(':','_')}.vcf
   """
 }
-//  --java-options \"-Xmx80g -XX:+UseParallelGC\"
 
 process merge_vcf {
   tag "merging"
@@ -369,7 +369,7 @@ process VariantFiltration {
   tuple path(sorted_snp_vcf), val(dp), path(genome_fasta), path(genome_dict), path(genome_fai)
 
   output: // filtered to identified SNP variants
-  path("${sorted_snp_vcf.simpleName}.marked.vcf")
+  path("${sorted_snp_vcf.simpleName}_marked.vcf")
 
   script:
   """
@@ -421,13 +421,15 @@ workflow {
   ireads_ch = reads_ch | map { n -> [n.get(0), n.get(1), "${i++}_"+n.get(0)] }
 
   // == Prepare mapped and unmapped read files
-  genome_ch | bwamem2_index | combine(ireads_ch) | bwamem2_mem
-  ireads_ch | FastqToSam | MarkIlluminaAdapters | SamToFastq
+  cleanreads_ch = ireads_ch | FastqToSam | MarkIlluminaAdapters | SamToFastq |
+    map { n -> [ n.simpleName, [n], n.simpleName.replaceFirst("_marked_interleaved","")] }
+
+  genome_ch | bwamem2_index | combine(cleanreads_ch) | bwamem2_mem
 
   mapped_ch = bwamem2_mem.out |
     map { n -> [n.simpleName.replaceFirst("_mapped",""), n] }
 
-  // Might be FastqToSam.out ... do we even need the SamToFastq?
+  // Might be FastqToSam.out ...
   unmapped_ch = MarkIlluminaAdapters.out |
     map { n -> [n.simpleName.replaceFirst("_marked",""), n] }
 
