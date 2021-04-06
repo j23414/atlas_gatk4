@@ -252,26 +252,32 @@ nextflow run 04_GATK.nf \
 ```
 N E X T F L O W  ~  version 20.10.0
 Launching `04_GATK.nf` [voluminous_hodgkin] - revision: 89ee103d4e
-executor >  slurm (149)
+executor >  slurm (155)
 [a8/0b122d] process > bwamem2_index (b73_chr1_150... [100%] 1 of 1 ✔
-[57/54f597] process > bwamem2_mem (BioSample19)      [100%] 27 of 27 ✔
-[3b/ca5153] process > FastqToSam (BioSample02)       [100%] 27 of 27 ✔
-[86/8fdb7c] process > MarkIlluminaAdapters (19_Bi... [100%] 27 of 27 ✔
-[78/b84e2a] process > SamToFastq (19_BioSample02_... [100%] 27 of 27 ✔
+[eb/749bc1] process > bwamem2_mem (BioSample19)      [100%] 27 of 27 ✔
+[c2/ba080c] process > FastqToSam (BioSample12)       [100%] 27 of 27 ✔
+[1f/e64577] process > MarkIlluminaAdapters (15_Bi... [100%] 27 of 27 ✔
+[af/837898] process > SamToFastq (15_BioSample12_... [100%] 27 of 27 ✔
 [5a/7467d4] process > CreateSequenceDictionary (b... [100%] 1 of 1 ✔
 [35/fd20b7] process > samtools_faidx (b73_chr1_15... [100%] 1 of 1 ✔
-[af/8e262d] process > MergeBamAlignment (19_BioSa... [100%] 27 of 27 ✔
+[37/72890f] process > MergeBamAlignment (19_BioSa... [100%] 27 of 27 ✔
 [96/6dffa1] process > makewindows (b73_chr1_15000... [100%] 1 of 1 ✔
-[6c/6fba65] process > gatk_HaplotypeCaller (chr1:... [ 50%] 5 of 10
-[-        ] process > merge_vcf                      -
-[-        ] process > vcftools_snp_only              -
-[-        ] process > SortVcf                        -
-[-        ] process > calc_DPvalue                   -
-[-        ] process > VariantFiltration              -
-[-        ] process > keep_only_pass                 -
+[ba/becb4e] process > gatk_HaplotypeCaller (chr1:... [100%] 10 of 10 ✔
+[0e/387bc4] process > merge_vcf (merging)            [100%] 1 of 1 ✔
+[47/6bba6c] process > vcftools_snp_only (first-ro... [100%] 1 of 1 ✔
+[37/94898c] process > SortVcf (first-round_merged... [100%] 1 of 1 ✔
+[6d/54dfab] process > calc_DPvalue (first-round_m... [100%] 1 of 1 ✔
+[52/52f702] process > VariantFiltration (first-ro... [100%] 1 of 1 ✔
+[81/26ce16] process > keep_only_pass (first-round... [100%] 1 of 1 ✔
+Completed at: 06-Apr-2021 17:27:13
+Duration    : 47m 48s
+CPU hours   : 6.0
+Succeeded   : 155
 ```
 
+* [timeline_report.html](timeline_report.html)
 * [ ] Compare Nextflow processes with WDL processes, notice similarity in naming - [gatk4-rna-best-practices.wdl](https://github.com/gatk-workflows/gatk4-rnaseq-germline-snps-indels/blob/master/gatk4-rna-best-practices.wdl)
+
 
 
 
