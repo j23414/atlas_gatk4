@@ -81,20 +81,21 @@ process SamToFastq {
   path(bam)
 
   output: // reads_interleaved.fq
-  path("${bam.simpleName}_interleaved.fq")
+  tuple val("${bam.simpleName}"), path("${bam.simpleName}_newR1.fq"), path("${bam.simpleName}_newR2.fq")
 
   script:
   """
   #! /usr/bin/env bash
   gatk SamToFastq \
   --INPUT ${bam} \
-  --FASTQ ${bam.simpleName}_interleaved.fq \
+  --FASTQ ${bam.simpleName}_newR1.fq \
+  --SECOND_END_FASTQ ${bam.simpleName}_newR2.fq \
   --CLIPPING_ATTRIBUTE XT \
   --CLIPPING_ACTION 2 \
-  --INTERLEAVE true \
   --INCLUDE_NON_PF_READS true
   """
 }
+// --INTERLEAVE true
 
 process bwamem2_index {
     tag "${genome_fasta.simpleName}"
@@ -127,16 +128,16 @@ process bwamem2_mem {
 
     input:
     tuple path(genome_fasta), path(genome_index_files), \
-      val(readname), path(readpairs), val(i_readname)
+      val(readname), path(readpairs)
 
     output:
-    path("${i_readname}_mapped.bam")
+    path("${readname}_mapped.bam")
 
     script:
     """
     #! /usr/bin/env bash
     bwa-mem2 mem -t 16 ${genome_fasta} ${readpairs} |\
-     samtools view --threads 16 -bS - > ${i_readname}_mapped.bam
+     samtools view --threads 16 -bS - > ${readname}_mapped.bam
     """
 }
 
@@ -422,14 +423,14 @@ workflow {
 
   // == Prepare mapped and unmapped read files
   cleanreads_ch = ireads_ch | FastqToSam | MarkIlluminaAdapters | SamToFastq |
-    map { n -> [ n.simpleName, [n], n.simpleName.replaceFirst("_marked_interleaved","")] }
+    map { n -> [ n.get(0).replaceFirst("_marked",""), [ n.get(1), n.get(2)] ] }
 
   genome_ch | bwamem2_index | combine(cleanreads_ch) | bwamem2_mem
 
   mapped_ch = bwamem2_mem.out |
     map { n -> [n.simpleName.replaceFirst("_mapped",""), n] }
 
-  // Might be FastqToSam.out ...
+  // Might be FastqToSam out
   unmapped_ch = MarkIlluminaAdapters.out |
     map { n -> [n.simpleName.replaceFirst("_marked",""), n] }
 
