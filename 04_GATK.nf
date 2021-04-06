@@ -142,6 +142,8 @@ process SamToFastq {
 process CreateSequenceDictionary {
   tag "$fasta"
   label 'gatk'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
   publishDir "${params.outdir}"
 
   input:  // genome.fasta
@@ -162,6 +164,8 @@ process CreateSequenceDictionary {
 process samtools_faidx {
   tag "$fasta"
   label 'samtools'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
   publishDir "${params.outdir}"
 
   input:  // genome.fasta
@@ -179,6 +183,9 @@ process samtools_faidx {
 process MergeBamAlignment {
   tag "$i_readname"
   label 'gatk'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+
   publishDir "${params.outdir}"
 
   input:  // [readgroup, unmapped reads, mapped reads]
@@ -210,6 +217,8 @@ process MergeBamAlignment {
 process makewindows {
   tag "$fasta"
   label 'samtools'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
   publishDir "${params.outdir}"
 
   input:  // genome.fasta
@@ -242,7 +251,6 @@ process gatk_HaplotypeCaller {
 
   output: // identified SNPs as a vcf file
   path("*.vcf")
-//  path "*.vcf.idx", emit: 'idx'
 
   script:
   """
@@ -256,6 +264,148 @@ process gatk_HaplotypeCaller {
   """
 }
 //  --java-options \"-Xmx80g -XX:+UseParallelGC\"
+
+process merge_vcf {
+  tag "merging"
+  label 'merge'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+
+  publishDir "${params.outdir}"
+
+  input:  // multiple SNP vcf files
+  path(vcfs)
+
+  output: // merged into one vcf file
+  path "first-round_merged.vcf"
+
+  script:
+  """
+  #! /usr/bin/env bash
+  cat ${vcfs.get(0)} | grep "^#" > first-round_merged.vcf
+  cat ${vcfs} | grep -v "^#" >> first-round_merged.vcf
+  """
+}
+
+process vcftools_snp_only {
+  tag "${merged_vcf.fileName}"
+  label 'vcftools'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+
+  publishDir "${params.outdir}"
+
+  input:  // merged SNP vcf file
+  path merged_vcf
+
+  output: // vcf file only containing SNPs
+  path "${merged_vcf.simpleName}_snps-only.*"
+
+  script:
+  """
+  #! /usr/bin/env bash
+  vcftools \
+  --vcf $merged_vcf \
+  --remove-indels \
+  --recode \
+  --recode-INFO-all \
+  --out ${merged_vcf.simpleName}_snps-only
+  """
+}
+
+process SortVcf {
+  tag "$vcf.fileName"
+  label 'gatk'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+
+  publishDir "$params.outdir"
+
+  input:  // [SNP.vcf, genome.dict]
+  tuple path(vcf), path(dict)
+
+  output: // sorted SNP.vcf
+  path ("*.vcf")  //, path("*.vcf.*")
+
+  script:
+  """
+  #! /usr/bin/env bash
+  gatk SortVcf \
+  --INPUT $vcf \
+  --SEQUENCE_DICTIONARY $dict \
+  --CREATE_INDEX true \
+  --OUTPUT ${vcf.simpleName}_sorted.vcf
+  """
+}
+
+process calc_DPvalue {
+  tag "$sorted_vcf.fileName"
+  label 'datamash'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+
+  input:  // sorted SNP vcf
+  path(sorted_vcf)
+
+  output: // DP value (number) to filter vcf in downstream process
+  stdout()
+
+  script:
+  """
+  #! /usr/bin/env bash
+  grep -v "^#" $sorted_vcf | cut -f 8 | grep -oe ";DP=.*" | cut -f 2 -d ';' | cut -f 2 -d "=" > dp.txt
+  cat dp.txt | datamash mean 1 sstdev 1 > dp.stats
+  cat dp.stats | awk '{print \$1+5*\$2}'
+  """
+}
+
+process VariantFiltration {
+  tag "$sorted_snp_vcf.fileName"
+  label 'gatk'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+  publishDir "$params.outdir"
+
+  input:  // [sorted snp vcf, DP filter, genome files ... ]
+  tuple path(sorted_snp_vcf), val(dp), path(genome_fasta), path(genome_dict), path(genome_fai)
+     //path(genome_index), path(genome_fai), path(genome_dict)
+
+  output: // filtered to identified SNP variants
+  path("${sorted_snp_vcf.simpleName}.marked.vcf")
+
+  script:
+  """
+  #! /usr/bin/env bash
+  gatk VariantFiltration \
+    --reference $genome_fasta \
+    --sequence-dictionary $genome_dict \
+    --variant $sorted_snp_vcf \
+    --filter-expression \"QD < 2.0 || FS > 60.0 || MQ < 40.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0 || DP > $dp\" \
+    --filter-name "FAIL" \
+    --output ${sorted_snp_vcf.simpleName}_marked.vcf
+  """
+}
+
+process keep_only_pass {
+  tag "$snp_marked_vcf.fileName"
+  label 'keeppassed'
+  executor 'slurm'
+  clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
+  publishDir "$params.outdir"
+
+  input:
+  path(snp_marked_vcf)
+
+  output:
+  path("${snp_marked_vcf.simpleName}_snp-only.pass-only.vcf")
+
+  script:
+  """
+  #! /usr/bin/env bash
+  cat $snp_marked_vcf | grep "^#" > ${snp_marked_vcf.simpleName}_snp-only.pass-only.vcf
+  cat $snp_marked_vcf | grep -v "^#" | awk '\$7=="PASS"' >> ${snp_marked_vcf.simpleName}_snp-only.pass-only.vcf
+  """
+}
 
 // === Main Workflow
 workflow {
@@ -295,6 +445,21 @@ workflow {
     combine(genome_ch) |
     combine(CreateSequenceDictionary.out) |
     combine(samtools_faidx.out) |
-    gatk_HaplotypeCaller
-  
+    gatk_HaplotypeCaller |
+    collect |
+    merge_vcf |
+    vcftools_snp_only |
+    combine(CreateSequenceDictionary.out) |
+    SortVcf |
+    calc_DPvalue | view
+
+  SortVcf.out |
+    combine(calc_DPvalue.out.map{n-> n.replaceAll("\n","")}) |
+    combine(genome_ch) |
+    combine(CreateSequenceDictionary.out) |
+    combine(samtools_faidx.out) |
+    VariantFiltration |
+    keep_only_pass |
+    view
+
 }
