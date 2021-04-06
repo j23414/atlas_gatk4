@@ -24,15 +24,14 @@ cd ${SLURM_SUBMIT_DIR}
 # === Get input size and module versions
 #module load gcc/7.3.0-xegsmw4 nextflow/20.07.1-waivkwa
 NEXTFLOW=/project/isu_gif_vrsc/bin/nextflow
-source /home/jennifer.chang/miniconda3/etc/profile.d/conda.sh
-conda activate ag100pest_env
 # === Main Program
 
 $NEXTFLOW run 04_GATK.nf \
   --genome "00_Raw-Data/test-data/ref/*.fasta" \
   --reads "00_Raw-Data/test-data/fastq/*_{R1,R2}.fastq.gz" \
   -resume \
-  -with-singularity gatk.sif
+  -with-singularity gatk.sif \
+  -with-timeline "timeline_report.html"
 
 # $NEXTFLOW run 01_Quality-Control.nf \
 #   --reads "00_Raw-Data/*.fastq.gz" \

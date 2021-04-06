@@ -65,7 +65,7 @@ process FastqToSam {
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
 
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:  // [readgroup, [left.fq.gz, right.fq.gz], increment_readgroup]
   tuple val(readname), path(readpairs), val(i_readname)
@@ -94,7 +94,7 @@ process MarkIlluminaAdapters {
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
 
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:  // reads.bam
   path(bam)
@@ -118,7 +118,7 @@ process SamToFastq {
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
 
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:  // reads.bam
   path(bam)
@@ -140,43 +140,43 @@ process SamToFastq {
 }
 
 process CreateSequenceDictionary {
-  tag "$fasta"
+  tag "$genome_fasta.simpleName"
   label 'gatk'
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
-  input:  // genome.fasta
-  path(fasta)
+  input:
+  path(genome_fasta)
 
   output: // genome.dict
-  path("${fasta.simpleName}.dict")
+  path("${genome_fasta.simpleName}.dict")
 
   script:
   """
   #! /usr/bin/env bash
   gatk CreateSequenceDictionary \
-  -R ${fasta} \
-  -O ${fasta.simpleName}.dict
+  -R ${genome_fasta} \
+  -O ${genome_fasta.simpleName}.dict
   """
 }
 
 process samtools_faidx {
-  tag "$fasta"
+  tag "${genome_fasta.simpleName}"
   label 'samtools'
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:  // genome.fasta
-  path(fasta)
+  path(genome_fasta)
 
   output:
   path("*.fai")
 
   """
   #! /usr/bin/env bash
-  samtools faidx $fasta
+  samtools faidx $genome_fasta
   """
 }
 
@@ -186,11 +186,10 @@ process MergeBamAlignment {
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
 
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
-  input:  // [readgroup, unmapped reads, mapped reads]
-  tuple val(i_readname), path(read_unmapped), path(read_mapped), path(genome_fasta), path(genome_dict) //, path(genome_fai)
-  //, path(genome_index), path(genome_fai), path(genome_dict)
+  input:
+  tuple val(i_readname), path(read_unmapped), path(read_mapped), path(genome_fasta), path(genome_dict)
 
   output: // merged bam and bai files
   tuple path("${i_readname}_merged.bam"), path("${i_readname}_merged.bai")
@@ -215,26 +214,26 @@ process MergeBamAlignment {
 }
 
 process makewindows {
-  tag "$fasta"
+  tag "${genome_fasta.simpleName}"
   label 'samtools'
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
-  input:  // genome.fasta
-  path fasta
+  input:
+  path(genome_fasta)
 
   output:
-  path("${fasta.simpleName}_coords.bed")
+  path("${genome_fasta.simpleName}_coords.bed")
 
   """
   #! /usr/bin/env bash
-  samtools faidx $fasta
-  awk -F'\t' '{print \$1"\t"\$2}' ${fasta}.fai > genome_length.txt
+  samtools faidx $genome_fasta
+  awk -F'\t' '{print \$1"\t"\$2}' ${genome_fasta}.fai > genome_length.txt
   bedtools makewindows -w $params.window -g genome_length.txt |\
     awk '{print \$1"\t"\$2+1"\t"\$3}' |\
     sed \$'s/\t/:/1' |\
-    sed \$'s/\t/-/g' > ${fasta.simpleName}_coords.bed
+    sed \$'s/\t/-/g' > ${genome_fasta.simpleName}_coords.bed
   """
 }
 
@@ -244,7 +243,7 @@ process gatk_HaplotypeCaller {
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
 
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:  // [window, reads files ..., genome files ...]
   tuple val(window), path(bam), path(bai), path(genome_fasta), path(genome_dict), path(genome_fai)
@@ -271,7 +270,7 @@ process merge_vcf {
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
 
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:  // multiple SNP vcf files
   path(vcfs)
@@ -293,13 +292,13 @@ process vcftools_snp_only {
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
 
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode: 'copy'
 
   input:  // merged SNP vcf file
-  path merged_vcf
+  path(merged_vcf)
 
   output: // vcf file only containing SNPs
-  path "${merged_vcf.simpleName}_snps-only.*"
+  path("${merged_vcf.simpleName}_snps-only.*")
 
   script:
   """
@@ -319,13 +318,13 @@ process SortVcf {
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
 
-  publishDir "$params.outdir"
+  publishDir "$params.outdir", mode: 'copy'
 
   input:  // [SNP.vcf, genome.dict]
   tuple path(vcf), path(dict)
 
   output: // sorted SNP.vcf
-  path ("*.vcf")  //, path("*.vcf.*")
+  path ("*.vcf")
 
   script:
   """
@@ -364,11 +363,10 @@ process VariantFiltration {
   label 'gatk'
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
-  publishDir "$params.outdir"
+  publishDir "$params.outdir", mode: 'copy'
 
   input:  // [sorted snp vcf, DP filter, genome files ... ]
   tuple path(sorted_snp_vcf), val(dp), path(genome_fasta), path(genome_dict), path(genome_fai)
-     //path(genome_index), path(genome_fai), path(genome_dict)
 
   output: // filtered to identified SNP variants
   path("${sorted_snp_vcf.simpleName}.marked.vcf")
@@ -391,7 +389,7 @@ process keep_only_pass {
   label 'keeppassed'
   executor 'slurm'
   clusterOptions '-N 1 -n 16 -t 02:00:00 --account=isu_gif_vrsc'
-  publishDir "$params.outdir"
+  publishDir "$params.outdir", mode: 'copy'
 
   input:
   path(snp_marked_vcf)
@@ -422,24 +420,25 @@ workflow {
   i = 1
   ireads_ch = reads_ch | map { n -> [n.get(0), n.get(1), "${i++}_"+n.get(0)] }
 
+  // == Prepare mapped and unmapped read files
   genome_ch | bwamem2_index | combine(ireads_ch) | bwamem2_mem
-  ireads_ch.take(3) | FastqToSam | MarkIlluminaAdapters | SamToFastq
+  ireads_ch | FastqToSam | MarkIlluminaAdapters | SamToFastq
 
-  index_pattern = ~/^\d+_/
   mapped_ch = bwamem2_mem.out |
     map { n -> [n.simpleName.replaceFirst("_mapped",""), n] }
 
-  // Might be FastqToSam.out
+  // Might be FastqToSam.out ... do we even need the SamToFastq?
   unmapped_ch = MarkIlluminaAdapters.out |
     map { n -> [n.simpleName.replaceFirst("_marked",""), n] }
 
-  genome_ch | ( CreateSequenceDictionary & samtools_faidx & makewindows )
-  both_ch = unmapped_ch | join(mapped_ch) | combine(genome_ch) | combine(CreateSequenceDictionary.out) | MergeBamAlignment
+  genome_ch | ( CreateSequenceDictionary & samtools_faidx )
+  unmapped_ch | join(mapped_ch) | combine(genome_ch) | combine(CreateSequenceDictionary.out) | MergeBamAlignment
 
   allbai_ch = MergeBamAlignment.out | map { n -> n.get(1)} | collect | map { n -> [n]}
   allbambai_ch = MergeBamAlignment.out | map { n -> n.get(0)} | collect | map { n -> [n]} | combine(allbai_ch)
 
-  makewindows.out | splitText( by:1) |
+  // == Run Gatk Haplotype by interval window
+  genome_ch | makewindows | splitText( by:1) |
     map { n -> n.replaceFirst("\n","") } |
     combine(allbambai_ch) | 
     combine(genome_ch) |
@@ -451,15 +450,14 @@ workflow {
     vcftools_snp_only |
     combine(CreateSequenceDictionary.out) |
     SortVcf |
-    calc_DPvalue | view
+    calc_DPvalue
 
+  // == Filter resulting SNPs
   SortVcf.out |
     combine(calc_DPvalue.out.map{n-> n.replaceAll("\n","")}) |
     combine(genome_ch) |
     combine(CreateSequenceDictionary.out) |
     combine(samtools_faidx.out) |
     VariantFiltration |
-    keep_only_pass |
-    view
-
+    keep_only_pass
 }
