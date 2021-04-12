@@ -105,7 +105,22 @@ gatk2 MarkIlluminaAdapters \
   --METRICS ${READNAME}_marked_metrics.txt
 ```
 
-**(2b) bwa index**
+**(3) SamToFastq**
+
+```
+gatk2 SamToFastq \
+  --INPUT ${READNAME}_marked.bam \
+  --FASTQ ${READNAME}_newR1.fq \
+  --SECOND_END_FASTQ ${READNAME}_newR2.fq \
+  --CLIPPING_ATTRIBUTE XT \
+  --CLIPPING_ACTION 2 \
+  --INTERLEAVE true \
+  --INCLUDE_NON_PF_READS true
+  
+ #   --FASTQ ${READNAME}_interleaved.fq 
+```
+
+**(4) bwa index**
 
 Needed to load `bwa` or `bwa-mem2` separately, was not included in `gatk` module. (We should include it, along with `samtools`)
 
@@ -113,19 +128,15 @@ Needed to load `bwa` or `bwa-mem2` separately, was not included in `gatk` module
 bwa-mem2 index $REF
 ```
 
-**(3) SamToFastq**
+**(5) bwa mem**
 
 ```
-gatk2 SamToFastq \
-  --INPUT ${READNAME}_marked.bam \
-  --FASTQ ${READNAME}_interleaved.fq \
-  --CLIPPING_ATTRIBUTE XT \
-  --CLIPPING_ACTION 2 \
-  --INTERLEAVE true \
-  --INCLUDE_NON_PF_READS true
+PROC=2
+bwa-mem2 mem -t $PROC $REF ${READNAME}_newR1.fq ${READNAME}_newR2.fq |\
+  samtools view --threads $PROC -bS - > ${READNAME}_aln.bam
 ```
 
-**(3b) CreateSequenceDictionary**
+**(6) CreateSequenceDictionary**
 
 ```
 gatk2 CreateSequenceDictionary \
@@ -133,15 +144,7 @@ gatk2 CreateSequenceDictionary \
   -O ${REF}.dict   # Actually will need to drop off fasta extension
 ```
 
-**(4) bwa mem**
-
-```
-PROC=2
-bwa-mem2 mem -t $PROC $REF $R1 $R2 |\
-  samtools view --threads $PROC -bS - > ${READNAME}_aln.bam
-```
-
-**(5) MergeBamAlignment**
+**(7) MergeBamAlignment**
 
 ```
 gatk2 MergeBamAlignment \
@@ -159,14 +162,14 @@ gatk2 MergeBamAlignment \
   --ATTRIBUTES_TO_RETAIN XS
 ```
 
-**(6) MarkDuplicates**
+**(8) MarkDuplicates**
 
 ```
 gatk2 MarkDuplicates \  #<=hmm we seemed to skip this step in our nextflow pipeline
  ...
 ```
 
-**(7) AddOr-ReplaceReadGroups**
+**(9) AddOr-ReplaceReadGroups**
 
 ...
 
